@@ -1,13 +1,12 @@
 package aliceald
 
 /*
-	AliceSoft's ALD archive opener
+	AliceSoft's ALD archive opener.
 */
 
 import (
 	"errors"
 	"io"
-	"os"
 
 	"golang.org/x/text/encoding/japanese"
 
@@ -15,35 +14,63 @@ import (
 )
 
 var (
-	ErrInvalidArchive = errors.New("error when opening the archive file")
+	ErrInvalidArchive = errors.New("invalid archive file")
 	ErrInvalidEntry   = errors.New("invalid entry index")
+	ErrUnknownVersion = errors.New("unknown archive version")
 )
 
 // info of each file entry in the ALD archive
-type AldEntry struct {
+type FileEntry struct {
 	Name         string // filename
 	Offset, Size int64  // absolute offset and size in the archive file
-	header       []byte // internal entry header
 }
 
-// AliceSoft ALD farchive
-type AliceALD struct {
-	Path  string     // Path to the .ald archive file
-	Entry []AldEntry // info of file entries in the archive
+type FileType int
+
+const (
+	TypeALD FileType = 0x01
+	TypeAFA FileType = 0x11
+)
+
+// AliceSoft ALD/AFA archive
+type AliceArch struct {
+	Type  FileType
+	Entry []FileEntry // info of file entries in the archive
 }
 
 // Number of entries in the archive
-func (p *AliceALD) Size() int {
+func (p *AliceArch) Size() int {
 	return len(p.Entry)
 }
 
-// Load directory info of ALD archive file.
-func LoadALD(filename string) (ald *AliceALD, err error) {
-	fi, err := os.Open(filename)
+// Read the data body of a file entry.
+// n is an index of p.Entry, and r must be the open file handle of p.Path.
+func (p *AliceArch) Read(r io.ReadSeeker, entryIndex int) (data []byte, err error) {
+	if entryIndex < 0 || entryIndex >= p.Size() {
+		err = ErrInvalidEntry
+		return
+	}
+	entry := p.Entry[entryIndex]
+	if entry.Size == 0 {
+		// simply no data
+		return nil, nil
+	}
+	_, err = r.Seek(entry.Offset, io.SeekStart)
 	if err != nil {
 		return
 	}
-	defer fi.Close()
+
+	buf := make([]byte, entry.Size)
+	_, err = io.ReadFull(r, buf)
+	if err != nil {
+		return
+	}
+	return buf, nil
+}
+
+// Load file info of Alicesoft ALD archive file.
+// Note that the ALD archive may have an extension of ".ald", ".alk" and ".dat".
+func LoadALD(fi io.ReadSeeker) (ald *AliceArch, err error) {
 
 	/*
 		// get "driver letter index" using the last letter of the filename
@@ -72,6 +99,10 @@ func LoadALD(filename string) (ald *AliceALD, err error) {
 
 	// read file offset list
 	// first 3 bytes is the size of offset block
+	_, err = fi.Seek(0, io.SeekStart)
+	if err != nil {
+		return
+	}
 	buf3 := make([]byte, 3) // 3-byte buffer
 	_, err = io.ReadFull(fi, buf3)
 	if err != nil {
@@ -102,6 +133,7 @@ func LoadALD(filename string) (ald *AliceALD, err error) {
 	}
 	/*
 		// read file ID block
+		// The file ID block is may be a global table of global file ID to the archive file ID and the file number.
 		fileIdSize := offsetList[0] - int64(offsetBlockSize)
 		if fileIdSize > 0 {
 			_, err = fi.Seek(offsetBlockSize, io.SeekStart)
@@ -118,16 +150,15 @@ func LoadALD(filename string) (ald *AliceALD, err error) {
 				if err != nil {
 					return
 				}
-				fileIdList[i].DriveId = int(buf3[0])
-				fileIdList[i].FileId = int(buf3[1])|(int(buf3[2])<<8)
-				fileIdList = append(fileIdList, f)
+				fileIdList[i].ArchiveId = int(buf3[0])
+				fileIdList[i].FileNo = int(buf3[1])|(int(buf3[2])<<8)
 			}
 		}
 	*/
 
 	// Read file headers
 	fileCount := len(entryOffset)
-	aldInfo := make([]AldEntry, len(entryOffset))
+	aldInfo := make([]FileEntry, len(entryOffset))
 	var u32sz uint32
 	sjisDecoder := japanese.ShiftJIS.NewDecoder()
 	for i := 0; i < fileCount; i++ {
@@ -135,6 +166,7 @@ func LoadALD(filename string) (ald *AliceALD, err error) {
 		if err != nil {
 			return
 		}
+		// read first 4 byte as the header size
 		_, err = bst.Read(fi, bst.LittleEndian, &u32sz)
 		if err != nil {
 			return
@@ -152,6 +184,7 @@ func LoadALD(filename string) (ald *AliceALD, err error) {
 			return
 		}
 		aldInfo[i].Offset = entryOffset[i] + int64(u32sz) // set file offset
+		// read header
 		buf := make([]byte, int(u32sz))
 		for i := 0; i < 4; i++ { // set first 4 byte to the size of header block
 			buf[i] = byte(u32sz & 0xff)
@@ -169,46 +202,21 @@ func LoadALD(filename string) (ald *AliceALD, err error) {
 		aldInfo[i].Size = int64(u32sz)
 
 		// get filename
+		const filenameOffset = 0x10 // in the header
 		nameLen := 0
-		for 16+nameLen < len(buf) && buf[16+nameLen] != 0 { // check the end of the filename
+		for filenameOffset+nameLen < len(buf) && buf[filenameOffset+nameLen] != 0 { // check the end of the filename
 			nameLen++
 		}
 		if nameLen > 0 {
 			// convert SJIS to UTF8
 			var u8 []byte
-			u8, err = sjisDecoder.Bytes(buf[16 : 16+nameLen])
+			u8, err = sjisDecoder.Bytes(buf[filenameOffset : filenameOffset+nameLen])
 			if err != nil {
 				return
 			}
 			aldInfo[i].Name = string(u8)
 		}
-		aldInfo[i].header = buf
 	}
 
-	return &AliceALD{Path: filename, Entry: aldInfo}, nil
-}
-
-// Read the data body of an entry.
-// n is an index of p.Entry, and r must be the open file handle of p.Path.
-func (p *AliceALD) Read(r io.ReadSeeker, n int) (data []byte, err error) {
-	if n < 0 || n >= p.Size() {
-		err = ErrInvalidEntry
-		return
-	}
-	entry := p.Entry[n]
-	if entry.Size == 0 {
-		// simply no data
-		return nil, nil
-	}
-	_, err = r.Seek(entry.Offset, io.SeekStart)
-	if err != nil {
-		return
-	}
-
-	buf := make([]byte, entry.Size)
-	_, err = io.ReadFull(r, buf)
-	if err != nil {
-		return
-	}
-	return buf, nil
+	return &AliceArch{Type: TypeALD, Entry: aldInfo}, nil
 }
