@@ -1,4 +1,4 @@
-module github.com/mixcode/aliceald
+module github.com/mixcode/alicesoft-afa
 
 go 1.19
 

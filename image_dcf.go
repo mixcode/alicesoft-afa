@@ -1,4 +1,4 @@
-package aliceald
+package aliceafa
 
 import (
 	"bytes"
@@ -16,7 +16,7 @@ var (
 )
 
 // DCF is QNF file with independent alpha masks.
-// Usually baseImageName contains the base image filename that should be overlayed on.
+// returned baseImageName contains the base image filename that should be overlayed on.
 func LoadDCF(fi io.ReadSeeker) (img image.Image, baseImageName string, err error) {
 
 	readSz := int64(0)
@@ -85,7 +85,7 @@ func LoadDCF(fi io.ReadSeeker) (img image.Image, baseImageName string, err error
 	// first 4 byte is the number of alpha mask bytes
 	maskCount := 0
 	for i := 0; i < 4; i++ {
-		maskCount = maskCount | (int(alphaMask[i]) << 8 * i)
+		maskCount = maskCount | (int(alphaMask[i]) << (8 * i))
 	}
 	alphaMask = alphaMask[4:]
 	if maskCount != len(alphaMask) {
@@ -104,25 +104,29 @@ func LoadDCF(fi io.ReadSeeker) (img image.Image, baseImageName string, err error
 		err = ErrInvalidFormat
 		return
 	}
-	qnfImg, sz64, err := LoadQNT(fi)
-	readSz += sz64
+	//qnfImg, sz64, err := LoadQNT(fi)
+	//readSz += sz64
+	qnfImg, err := LoadQNT(fi)
 	if err != nil {
 		return
 	}
-	if sz64 != int64(imageChunk.Len) {
-		err = fmt.Errorf("image data size not match: expected %x, actual %x", imageChunk.Len, sz64)
-		return
-	}
+	// TODO: use stream counter for actual read size
+	readSz += int64(imageChunk.Len)
 
 	// merge the image and the alpha mask
 	const (
 		// each alpha mask byte represents a 16x16 pixel block
 		blockX, blockY = 16, 16
 	)
-	xCount := (dcfHeader.Width + blockX - 1) / blockX
-	yCount := (dcfHeader.Height + blockY - 1) / blockY
+	//xCount := (dcfHeader.Width + blockX - 1) / blockX
+	//yCount := (dcfHeader.Height + blockY - 1) / blockY
+	xCount := dcfHeader.Width / blockX // Note: the mask may be smaller than the image
+	yCount := dcfHeader.Height / blockY
 	if xCount*yCount != maskCount {
-		err = fmt.Errorf("invalid alpha block size")
+		// log.Printf("dim[%d x %d]", dcfHeader.Width, dcfHeader.Height)
+		// log.Printf("qnt[%d x %d]", qnfImg.Bounds().Dx(), qnfImg.Bounds().Dy())
+		// log.Printf("dimb[%d x %d](%d)", dcfHeader.Width/blockX, dcfHeader.Height/blockY, (dcfHeader.Width/blockX)*(dcfHeader.Height/blockY))
+		err = fmt.Errorf("invalid alpha block size: expected %d, actual %d", xCount*yCount, maskCount)
 		return
 	}
 

@@ -1,4 +1,4 @@
-package aliceald
+package aliceafa
 
 import (
 	"compress/zlib"
@@ -10,7 +10,7 @@ import (
 )
 
 // load file info of Alicesoft AFA archive.
-// AFA archive may have ".afa" extension
+// An AFA archive may has ".afa" extension.
 func OpenAFA(fi io.ReadSeeker) (afa *AliceArch, err error) {
 
 	// Prepare shift-jis text decoder

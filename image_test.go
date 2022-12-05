@@ -1,4 +1,4 @@
-package aliceald
+package aliceafa
 
 import (
 	"fmt"
@@ -22,7 +22,7 @@ func TestQNT(t *testing.T) {
 	}
 	defer fi.Close()
 
-	img, _, err := LoadQNT(fi)
+	img, err := LoadQNT(fi)
 	if err != nil {
 		t.Fatal(err)
 	}

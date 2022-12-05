@@ -1,4 +1,4 @@
-package aliceald
+package aliceafa
 
 /*
 	AliceSoft's ALD archive opener.
@@ -19,17 +19,17 @@ var (
 	ErrUnknownVersion = errors.New("unknown archive version")
 )
 
-// info of each file entry in the ALD archive
+// info of each file entry in the ALD/AFA archive
 type FileEntry struct {
 	Name         string // filename
-	Offset, Size int64  // absolute offset and size in the archive file
+	Offset, Size int64  // absolute file offset and size to the file entry
 }
 
 type FileType int
 
 const (
-	TypeALD FileType = 0x01
-	TypeAFA FileType = 0x11
+	TypeALD FileType = 0x01 // .ald archive
+	TypeAFA FileType = 0x11 // .afa archive
 )
 
 // AliceSoft ALD/AFA archive
@@ -44,7 +44,7 @@ func (p *AliceArch) Size() int {
 }
 
 // Read the data body of a file entry.
-// n is an index of p.Entry, and r must be the open file handle of p.Path.
+// entryIndex is an index of p.Entry, and r must be the open file handle of the archive file
 func (p *AliceArch) Read(r io.ReadSeeker, entryIndex int) (data []byte, err error) {
 	if entryIndex < 0 || entryIndex >= p.Size() {
 		err = ErrInvalidEntry

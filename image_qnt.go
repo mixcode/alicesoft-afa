@@ -1,4 +1,4 @@
-package aliceald
+package aliceafa
 
 import (
 	"compress/zlib"
@@ -14,9 +14,12 @@ var (
 	ErrInvalidFormat = errors.New("invalid data format")
 )
 
-// Load QNT image
-func LoadQNT(fi io.Reader) (img image.Image, readSz int64, err error) {
+// Load QNT image.
+// The QNT images assumed to be 8-bit RGBA image.
+// Returning img is actually an *image.NRGBA type.
+func LoadQNT(fi io.ReadSeeker) (img image.Image, err error) {
 
+	readSz := int64(0)
 	headerSize := int64(48)
 
 	// read signature
@@ -29,7 +32,7 @@ func LoadQNT(fi io.Reader) (img image.Image, readSz int64, err error) {
 		return
 	}
 	if string(qntSig.Signature[:3]) != "QNT" || qntSig.Signature[3] != 0 {
-		return nil, readSz, ErrInvalidFormat
+		return nil, ErrInvalidFormat
 	}
 	readSz += int64(sz)
 
@@ -61,9 +64,8 @@ func LoadQNT(fi io.Reader) (img image.Image, readSz int64, err error) {
 		return
 	}
 	readSz += int64(sz)
-	//log.Printf("QNF header: %v", qntImageInfo)
 	if qntImageInfo.ColorDepth != 24 {
-		err = fmt.Errorf("unsupported bit depth; must be 24 but received %d", qntImageInfo.ColorDepth)
+		err = fmt.Errorf("unsupported bit depth; must be 24 but has %d", qntImageInfo.ColorDepth)
 		return
 	}
 
@@ -82,7 +84,7 @@ func LoadQNT(fi io.Reader) (img image.Image, readSz int64, err error) {
 	width, height := qntImageInfo.Width, qntImageInfo.Height
 	if width == 0 || height == 0 {
 		// no image
-		return nil, readSz, nil
+		return nil, nil
 	}
 
 	// determine width and height of raw data
@@ -125,6 +127,8 @@ func LoadQNT(fi io.Reader) (img image.Image, readSz int64, err error) {
 	// load RGB planes
 	if qntImageInfo.RGBDataSize > 0 {
 
+		lastPos, _ := fi.Seek(0, io.SeekCurrent)
+
 		// reorder pixels
 		reorderPixel := func(dest, raw []byte, w, h int) {
 			// QNT pixels are grouped in same colors, blue first.
@@ -161,9 +165,16 @@ func LoadQNT(fi io.Reader) (img image.Image, readSz int64, err error) {
 				return
 			}
 			reorderPixel(plane[i], buf, rawWidth, rawHeight)
-			decodeDiff(plane[i], width, height)
+			decodeDiff(plane[i], rawWidth, rawHeight)
 		}
 
+		// skip leftover bytes
+		currentPos, _ := fi.Seek(0, io.SeekCurrent)
+		rgbSize := currentPos - lastPos
+		if rgbSize != int64(qntImageInfo.RGBDataSize) {
+			skipSize := int64(qntImageInfo.RGBDataSize) - rgbSize
+			io.CopyN(io.Discard, fi, skipSize)
+		}
 		readSz += int64(qntImageInfo.RGBDataSize)
 	}
 
