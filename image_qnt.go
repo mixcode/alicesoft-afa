@@ -15,10 +15,9 @@ var (
 )
 
 // Load QNT image
-func LoadQNT(fi io.Reader) (img image.Image, err error) {
+func LoadQNT(fi io.Reader) (img image.Image, readSz int64, err error) {
 
-	readSz := 0
-	headerSize := 48
+	headerSize := int64(48)
 
 	// read signature
 	var qntSig struct {
@@ -30,9 +29,9 @@ func LoadQNT(fi io.Reader) (img image.Image, err error) {
 		return
 	}
 	if string(qntSig.Signature[:3]) != "QNT" || qntSig.Signature[3] != 0 {
-		return nil, ErrInvalidFormat
+		return nil, readSz, ErrInvalidFormat
 	}
-	readSz += sz
+	readSz += int64(sz)
 
 	// the total header size vary on the version
 	if qntSig.Version != 0 {
@@ -42,8 +41,8 @@ func LoadQNT(fi io.Reader) (img image.Image, err error) {
 		if err != nil {
 			return
 		}
-		readSz += sz
-		headerSize = int(s)
+		readSz += int64(sz)
+		headerSize = int64(s)
 	}
 
 	// read the image info
@@ -61,7 +60,7 @@ func LoadQNT(fi io.Reader) (img image.Image, err error) {
 	if err != nil {
 		return
 	}
-	readSz += sz
+	readSz += int64(sz)
 	//log.Printf("QNF header: %v", qntImageInfo)
 	if qntImageInfo.ColorDepth != 24 {
 		err = fmt.Errorf("unsupported bit depth; must be 24 but received %d", qntImageInfo.ColorDepth)
@@ -76,14 +75,14 @@ func LoadQNT(fi io.Reader) (img image.Image, err error) {
 		if err != nil {
 			return
 		}
-		readSz += sz
+		readSz += int64(sz)
 	}
 
 	// image width and height
 	width, height := qntImageInfo.Width, qntImageInfo.Height
 	if width == 0 || height == 0 {
 		// no image
-		return nil, nil
+		return nil, readSz, nil
 	}
 
 	// determine width and height of raw data
@@ -165,6 +164,7 @@ func LoadQNT(fi io.Reader) (img image.Image, err error) {
 			decodeDiff(plane[i], width, height)
 		}
 
+		readSz += int64(qntImageInfo.RGBDataSize)
 	}
 
 	if qntImageInfo.AlphaDataSize > 0 {
@@ -179,6 +179,7 @@ func LoadQNT(fi io.Reader) (img image.Image, err error) {
 			return
 		}
 		decodeDiff(plane[3], rawWidth, rawHeight)
+		readSz += int64(qntImageInfo.AlphaDataSize)
 	} else {
 		// Set all pixel's alpha to 255
 		for i := 0; i < planeSize; i++ {
@@ -187,11 +188,10 @@ func LoadQNT(fi io.Reader) (img image.Image, err error) {
 	}
 
 	// build image from planes
+	// NRGBA is Non-alpha-premultiplied RGB, that means 0<=RGB<=255
+	// (plane RGBA is Alpha-premultiplied, that means 0<=RGB<=A)
 	wx, wy := qntImageInfo.X, qntImageInfo.Y
 	rgba := image.NewNRGBA(image.Rect(wx, wy, wx+width, wy+height))
-	if width == 0 || height == 0 {
-		return rgba, nil
-	}
 	p := 0
 	for i := 0; i < height; i++ {
 		k := i * rawWidth
@@ -211,5 +211,6 @@ func LoadQNT(fi io.Reader) (img image.Image, err error) {
 		}
 	}
 
-	return rgba, nil
+	img = rgba
+	return
 }

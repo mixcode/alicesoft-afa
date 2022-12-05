@@ -70,7 +70,7 @@ func (p *AliceArch) Read(r io.ReadSeeker, entryIndex int) (data []byte, err erro
 
 // Load file info of Alicesoft ALD archive file.
 // Note that the ALD archive may have an extension of ".ald", ".alk" and ".dat".
-func LoadALD(fi io.ReadSeeker) (ald *AliceArch, err error) {
+func OpenALD(fi io.ReadSeeker) (ald *AliceArch, err error) {
 
 	/*
 		// get "driver letter index" using the last letter of the filename

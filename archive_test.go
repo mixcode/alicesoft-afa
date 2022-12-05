@@ -16,7 +16,7 @@ func TestAld(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer fi.Close()
-	ald, err := LoadALD(fi)
+	ald, err := OpenALD(fi)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,14 +53,16 @@ func TestAfa(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer fi.Close()
-	afa, err := LoadAFA(fi)
+	afa, err := OpenAFA(fi)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	sz := afa.Size()
-	if sz != 4297 {
-		t.Fatalf("invalid file count")
+	if sz != 49 {
+		//if sz != 4297 {
+		//log.Printf("%v", sz)
+		t.Fatalf("invalid file count: %v", sz)
 	}
 
 	/*
@@ -73,6 +75,12 @@ func TestAfa(t *testing.T) {
 		files := []int{1351, 1352}
 		for _, n := range files {
 			err = saveFile(afa, fi, n)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		for i := 1459; i < 1490; i++ {
+			err = saveFile(afa, fi, i)
 			if err != nil {
 				t.Fatal(err)
 			}

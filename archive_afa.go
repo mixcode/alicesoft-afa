@@ -11,7 +11,7 @@ import (
 
 // load file info of Alicesoft AFA archive.
 // AFA archive may have ".afa" extension
-func LoadAFA(fi io.ReadSeeker) (afa *AliceArch, err error) {
+func OpenAFA(fi io.ReadSeeker) (afa *AliceArch, err error) {
 
 	// Prepare shift-jis text decoder
 	var mst = new(bst.Marshaller)
