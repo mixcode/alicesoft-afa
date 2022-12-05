@@ -208,7 +208,7 @@ func mergeImage(baseImg, img image.Image) (image.Image, error) {
 func run() (err error) {
 	args := flag.Args()
 	if len(args) == 0 {
-		return fmt.Errorf("archive filename not given")
+		return fmt.Errorf("archive filename not given (use -help for help)")
 	}
 
 	archiveFile, args := args[0], args[1:]
