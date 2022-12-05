@@ -9,9 +9,9 @@ import (
 	bst "github.com/mixcode/binarystruct"
 )
 
-// load file info of Alicesoft AFA archive.
+// Load file info of Alicesoft AFA archive.
 // An AFA archive may has ".afa" extension.
-func OpenAFA(fi io.ReadSeeker) (afa *AliceArch, err error) {
+func OpenAFA(rs io.ReadSeeker) (afa *AliceArch, err error) {
 
 	// Prepare shift-jis text decoder
 	var mst = new(bst.Marshaller)
@@ -35,7 +35,7 @@ func OpenAFA(fi io.ReadSeeker) (afa *AliceArch, err error) {
 		Unknown    int   `binary:"uint32"` // always 1
 		DataOffset int64 `binary:"uint32"` // absolute file offset to "DATA" tag
 	}
-	_, err = mst.Read(fi, bst.LittleEndian, &afaHeader)
+	_, err = mst.Read(rs, bst.LittleEndian, &afaHeader)
 	if err != nil {
 		return
 	}
@@ -54,7 +54,7 @@ func OpenAFA(fi io.ReadSeeker) (afa *AliceArch, err error) {
 		DecompressedSize int `binary:"uint32"`
 		EntryCount       int `binary:"uint32"`
 	}
-	_, err = mst.Read(fi, bst.LittleEndian, &infoTag)
+	_, err = mst.Read(rs, bst.LittleEndian, &infoTag)
 	if err != nil {
 		return
 	}
@@ -63,7 +63,7 @@ func OpenAFA(fi io.ReadSeeker) (afa *AliceArch, err error) {
 	}
 	// read ZLIB compressed tag body
 	infoCompressedSize := int64(infoTag.Len) - 0x10
-	zReader, err := zlib.NewReader(io.LimitReader(fi, infoCompressedSize))
+	zReader, err := zlib.NewReader(io.LimitReader(rs, infoCompressedSize))
 	if err != nil {
 		return
 	}

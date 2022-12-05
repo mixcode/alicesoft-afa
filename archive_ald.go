@@ -1,8 +1,6 @@
+// Package aliceafa is a hander for AliceSoft's ALD and AFA archive format.
+// This package also contains decoder for AliceSoft QNT and DCF image files.
 package aliceafa
-
-/*
-	AliceSoft's ALD archive opener.
-*/
 
 import (
 	"errors"
@@ -69,8 +67,8 @@ func (p *AliceArch) Read(r io.ReadSeeker, entryIndex int) (data []byte, err erro
 }
 
 // Load file info of Alicesoft ALD archive file.
-// Note that the ALD archive may have an extension of ".ald", ".alk" and ".dat".
-func OpenALD(fi io.ReadSeeker) (ald *AliceArch, err error) {
+// An ALD archive may have an extension of ".ald", ".alk" and ".dat".
+func OpenALD(rs io.ReadSeeker) (ald *AliceArch, err error) {
 
 	/*
 		// get "driver letter index" using the last letter of the filename
@@ -99,12 +97,12 @@ func OpenALD(fi io.ReadSeeker) (ald *AliceArch, err error) {
 
 	// read file offset list
 	// first 3 bytes is the size of offset block
-	_, err = fi.Seek(0, io.SeekStart)
+	_, err = rs.Seek(0, io.SeekStart)
 	if err != nil {
 		return
 	}
 	buf3 := make([]byte, 3) // 3-byte buffer
-	_, err = io.ReadFull(fi, buf3)
+	_, err = io.ReadFull(rs, buf3)
 	if err != nil {
 		return
 	}
@@ -114,7 +112,7 @@ func OpenALD(fi io.ReadSeeker) (ald *AliceArch, err error) {
 	offsetBlockSize -= 3 // block size includes the size itself
 	for sz := int64(0); sz < offsetBlockSize; {
 		n := 0
-		n, err = io.ReadFull(fi, buf3)
+		n, err = io.ReadFull(rs, buf3)
 		if err != nil {
 			return
 		}
@@ -162,12 +160,12 @@ func OpenALD(fi io.ReadSeeker) (ald *AliceArch, err error) {
 	var u32sz uint32
 	sjisDecoder := japanese.ShiftJIS.NewDecoder()
 	for i := 0; i < fileCount; i++ {
-		_, err = fi.Seek(entryOffset[i], io.SeekStart)
+		_, err = rs.Seek(entryOffset[i], io.SeekStart)
 		if err != nil {
 			return
 		}
 		// read first 4 byte as the header size
-		_, err = bst.Read(fi, bst.LittleEndian, &u32sz)
+		_, err = bst.Read(rs, bst.LittleEndian, &u32sz)
 		if err != nil {
 			return
 		}
@@ -190,7 +188,7 @@ func OpenALD(fi io.ReadSeeker) (ald *AliceArch, err error) {
 			buf[i] = byte(u32sz & 0xff)
 			u32sz >>= 8
 		}
-		_, err = io.ReadFull(fi, buf[4:])
+		_, err = io.ReadFull(rs, buf[4:])
 		if err != nil {
 			return
 		}

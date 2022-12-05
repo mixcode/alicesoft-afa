@@ -17,7 +17,7 @@ var (
 // Load QNT image.
 // The QNT images assumed to be 8-bit RGBA image.
 // Returning img is actually an *image.NRGBA type.
-func LoadQNT(fi io.ReadSeeker) (img image.Image, err error) {
+func LoadQNT(rs io.ReadSeeker) (img image.Image, err error) {
 
 	readSz := int64(0)
 	headerSize := int64(48)
@@ -27,7 +27,7 @@ func LoadQNT(fi io.ReadSeeker) (img image.Image, err error) {
 		Signature []byte `binary:"[4]byte"`
 		Version   int    `binary:"uint32"`
 	}
-	sz, err := bst.Read(fi, bst.LittleEndian, &qntSig)
+	sz, err := bst.Read(rs, bst.LittleEndian, &qntSig)
 	if err != nil {
 		return
 	}
@@ -40,7 +40,7 @@ func LoadQNT(fi io.ReadSeeker) (img image.Image, err error) {
 	if qntSig.Version != 0 {
 		// if the version is not zero, then read the header size
 		var s uint32
-		sz, err = bst.Read(fi, bst.LittleEndian, &s)
+		sz, err = bst.Read(rs, bst.LittleEndian, &s)
 		if err != nil {
 			return
 		}
@@ -59,7 +59,7 @@ func LoadQNT(fi io.ReadSeeker) (img image.Image, err error) {
 		RGBDataSize, AlphaDataSize int `binary:"uint32"`
 		//+0x20
 	}
-	sz, err = bst.Read(fi, bst.LittleEndian, &qntImageInfo)
+	sz, err = bst.Read(rs, bst.LittleEndian, &qntImageInfo)
 	if err != nil {
 		return
 	}
@@ -73,7 +73,7 @@ func LoadQNT(fi io.ReadSeeker) (img image.Image, err error) {
 	var extraHeader []byte
 	if readSz < headerSize {
 		extraHeader = make([]byte, headerSize-readSz)
-		sz, err = io.ReadFull(fi, extraHeader)
+		sz, err = io.ReadFull(rs, extraHeader)
 		if err != nil {
 			return
 		}
@@ -127,7 +127,7 @@ func LoadQNT(fi io.ReadSeeker) (img image.Image, err error) {
 	// load RGB planes
 	if qntImageInfo.RGBDataSize > 0 {
 
-		lastPos, _ := fi.Seek(0, io.SeekCurrent)
+		lastPos, _ := rs.Seek(0, io.SeekCurrent)
 
 		// reorder pixels
 		reorderPixel := func(dest, raw []byte, w, h int) {
@@ -151,7 +151,7 @@ func LoadQNT(fi io.ReadSeeker) (img image.Image, err error) {
 		}
 
 		// prepare ZLIB decoder
-		rgbReader, e := zlib.NewReader(io.LimitReader(fi, int64(qntImageInfo.RGBDataSize)))
+		rgbReader, e := zlib.NewReader(io.LimitReader(rs, int64(qntImageInfo.RGBDataSize)))
 		if e != nil {
 			err = e
 			return
@@ -169,18 +169,18 @@ func LoadQNT(fi io.ReadSeeker) (img image.Image, err error) {
 		}
 
 		// skip leftover bytes
-		currentPos, _ := fi.Seek(0, io.SeekCurrent)
+		currentPos, _ := rs.Seek(0, io.SeekCurrent)
 		rgbSize := currentPos - lastPos
 		if rgbSize != int64(qntImageInfo.RGBDataSize) {
 			skipSize := int64(qntImageInfo.RGBDataSize) - rgbSize
-			io.CopyN(io.Discard, fi, skipSize)
+			io.CopyN(io.Discard, rs, skipSize)
 		}
 		readSz += int64(qntImageInfo.RGBDataSize)
 	}
 
 	if qntImageInfo.AlphaDataSize > 0 {
 		// load alpha plane
-		alphaReader, e := zlib.NewReader(io.LimitReader(fi, int64(qntImageInfo.AlphaDataSize)))
+		alphaReader, e := zlib.NewReader(io.LimitReader(rs, int64(qntImageInfo.AlphaDataSize)))
 		if e != nil {
 			err = e
 			return

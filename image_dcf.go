@@ -17,7 +17,7 @@ var (
 
 // DCF is QNF file with independent alpha masks.
 // returned baseImageName contains the base image filename that should be overlayed on.
-func LoadDCF(fi io.ReadSeeker) (img image.Image, baseImageName string, err error) {
+func LoadDCF(rs io.ReadSeeker) (img image.Image, baseImageName string, err error) {
 
 	readSz := int64(0)
 
@@ -35,7 +35,7 @@ func LoadDCF(fi io.ReadSeeker) (img image.Image, baseImageName string, err error
 		BaseImageNameLen int    `binary:"uint32"`
 		BaseImageName    []byte `binary:"[BaseImageNameLen]byte"` // name of the base image
 	}
-	sz, err := bst.Read(fi, bst.LittleEndian, &dcfHeader)
+	sz, err := bst.Read(rs, bst.LittleEndian, &dcfHeader)
 	if err != nil {
 		return
 	}
@@ -69,7 +69,7 @@ func LoadDCF(fi io.ReadSeeker) (img image.Image, baseImageName string, err error
 		UncompressedSize int    `binary:"uint32"`
 		Zip              []byte `binary:"[Len - 4]byte"`
 	}
-	sz, err = bst.Read(fi, bst.LittleEndian, &alphaChunk)
+	sz, err = bst.Read(rs, bst.LittleEndian, &alphaChunk)
 	if err != nil {
 		return
 	}
@@ -95,7 +95,7 @@ func LoadDCF(fi io.ReadSeeker) (img image.Image, baseImageName string, err error
 
 	// read embedded QNF image
 	var imageChunk ChunkHeader
-	sz, err = bst.Read(fi, bst.LittleEndian, &imageChunk)
+	sz, err = bst.Read(rs, bst.LittleEndian, &imageChunk)
 	if err != nil {
 		return
 	}
@@ -106,7 +106,7 @@ func LoadDCF(fi io.ReadSeeker) (img image.Image, baseImageName string, err error
 	}
 	//qnfImg, sz64, err := LoadQNT(fi)
 	//readSz += sz64
-	qnfImg, err := LoadQNT(fi)
+	qnfImg, err := LoadQNT(rs)
 	if err != nil {
 		return
 	}
