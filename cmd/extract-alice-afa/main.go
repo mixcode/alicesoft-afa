@@ -7,10 +7,10 @@ import (
 	"image/draw"
 	"image/png"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"golang.org/x/text/encoding/japanese"
 
@@ -101,6 +101,49 @@ func isFileExist(path string) bool {
 	return !os.IsNotExist(err)
 }
 
+// PNG save goroutine
+type OutFile struct {
+	outPath string
+	img     image.Image
+}
+
+var (
+	savePngCh = make(chan OutFile, 10)
+)
+
+// a goroutine to save PNG in background
+func savePngProc(dataCh chan OutFile) (err error) {
+	for {
+		of, ok := <-dataCh
+		if !ok {
+			return nil
+		}
+		if of.img == nil {
+			continue
+		}
+
+		// write PNG image
+		of.outPath += ".png"
+		if !overwrite && isFileExist(of.outPath) {
+			return fmt.Errorf("file %s exists", of.outPath)
+		}
+
+		var fo *os.File
+		fo, err = os.Create(of.outPath)
+		if err != nil {
+			return
+		}
+		defer fo.Close()
+		err = png.Encode(fo, of.img)
+		if err != nil {
+			return
+		}
+		if !quiet {
+			fmt.Println(of.outPath)
+		}
+	}
+}
+
 func saveFile(rs io.ReadSeeker, arch *aliceafa.AliceArch, index int, nameMap map[string]int) (err error) {
 	e := arch.Entry[index]
 	_, ext := baseAndLowerExt(e.Name)
@@ -111,10 +154,6 @@ func saveFile(rs io.ReadSeeker, arch *aliceafa.AliceArch, index int, nameMap map
 	}
 
 	outPath := filepath.Join(outDir, e.Name)
-	if !overwrite && isFileExist(outPath) {
-		err = fmt.Errorf("file %s exists", outPath)
-		return
-	}
 	_, err = rs.Seek(e.Offset, io.SeekStart)
 	if err != nil {
 		return
@@ -122,6 +161,10 @@ func saveFile(rs io.ReadSeeker, arch *aliceafa.AliceArch, index int, nameMap map
 
 	if rawImage || !isImage {
 		// save file as-is
+		if !overwrite && isFileExist(outPath) {
+			err = fmt.Errorf("file %s exists", outPath)
+			return
+		}
 		var fo *os.File
 		fo, err = os.Create(outPath)
 		if err != nil {
@@ -176,23 +219,8 @@ func saveFile(rs io.ReadSeeker, arch *aliceafa.AliceArch, index int, nameMap map
 		}
 	}
 
-	if img != nil {
-		// write PNG
-		outPath += ".png"
-		var fo *os.File
-		fo, err = os.Create(outPath)
-		if err != nil {
-			return
-		}
-		defer fo.Close()
-		err = png.Encode(fo, img)
-		if err != nil {
-			return
-		}
-		if !quiet {
-			fmt.Println(outPath)
-		}
-	}
+	// send the image to png save worker
+	savePngCh <- OutFile{outPath: outPath, img: img}
 
 	return
 }
@@ -257,7 +285,6 @@ func run() (err error) {
 	if err != nil {
 		return
 	}
-	log.Printf("outDir: %s", outDir)
 
 	// make archive name map for DCF merge
 	nameMap := make(map[string]int)
@@ -265,6 +292,25 @@ func run() (err error) {
 		base, _ := baseAndLowerExt(e.Name)
 		nameMap[base] = i
 	}
+
+	// start the png save thread
+	var savePngErr error
+	var savePngWg sync.WaitGroup
+	savePngWg.Add(1)
+	defer func() {
+		close(savePngCh)
+		savePngWg.Wait()
+	}()
+	go func() {
+		savePngErr = savePngProc(savePngCh)
+		for { // dry up the channel
+			_, ok := <-savePngCh
+			if !ok {
+				break
+			}
+		}
+		savePngWg.Done()
+	}()
 
 	if len(args) > 0 {
 		argMap := make(map[string]bool)
@@ -278,6 +324,10 @@ func run() (err error) {
 					return
 				}
 			}
+			if savePngErr != nil { // PNG save worker failed
+				err = savePngErr
+				return
+			}
 		}
 	} else {
 		for i := range arch.Entry {
@@ -285,8 +335,11 @@ func run() (err error) {
 			if err != nil {
 				return
 			}
+			if savePngErr != nil { // PNG save worker failed
+				err = savePngErr
+				return
+			}
 		}
-
 	}
 
 	return
