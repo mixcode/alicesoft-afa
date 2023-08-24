@@ -7,6 +7,7 @@ import (
 	"image/draw"
 	"image/png"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -97,7 +98,7 @@ func listFiles(rs io.ReadSeeker, arch *aliceafa.AliceArch) (err error) {
 
 func isFileExist(path string) bool {
 	_, err := os.Stat(path)
-	return os.IsNotExist(err)
+	return !os.IsNotExist(err)
 }
 
 func saveFile(rs io.ReadSeeker, arch *aliceafa.AliceArch, index int, nameMap map[string]int) (err error) {
@@ -256,6 +257,7 @@ func run() (err error) {
 	if err != nil {
 		return
 	}
+	log.Printf("outDir: %s", outDir)
 
 	// make archive name map for DCF merge
 	nameMap := make(map[string]int)
